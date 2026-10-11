@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apple Catcher</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #23313b; font-family: "Trebuchet MS", Verdana, sans-serif;
+  }
+  canvas { background: #bfe3f5; border-radius: 8px; max-width: 100%; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="game" width="480" height="640"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+
+let state = "start";   // "start" | "playing" | "over"
+let score = 0, lives = 3;
+let items = [];
+let spawnTimer = 0;
+const keys = {};
+
+const player = { x: W / 2 - 40, y: H - 70, w: 80, h: 40, speed: 6 };
+
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if ((e.key === "Enter" || e.key === " ") && state !== "playing") startGame();
+});
+window.addEventListener("keyup", e => keys[e.key] = false);
+
+function pointerX(e) {
+  const r = canvas.getBoundingClientRect();
+  return (e.clientX - r.left) * (W / r.width);
+}
+canvas.addEventListener("pointermove", e => {
+  if (state === "playing") player.x = pointerX(e) - player.w / 2;
+});
+canvas.addEventListener("pointerdown", e => {
+  if (state !== "playing") startGame();
+  else player.x = pointerX(e) - player.w / 2;
+});
+
+function startGame() {
+  state = "playing";
+  score = 0; lives = 3; items = []; spawnTimer = 0;
+  player.x = W / 2 - player.w / 2;
+}
+
+function spawn() {
+  const isRock = Math.random() < 0.3;
+  items.push({
+    type: isRock ? "rock" : "apple",
+    x: 20 + Math.random() * (W - 40),
+    y: -20,
+    r: isRock ? 18 : 15,
+    vy: 2.5 + Math.random() * 1.5 + score * 0.05
+  });
+}
+
+function update() {
+  if (keys["ArrowLeft"] || keys["a"]) player.x -= player.speed;
+  if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
+  player.x = Math.max(0, Math.min(W - player.w, player.x));
+
+  if (--spawnTimer <= 0) { spawn(); spawnTimer = 40; }
+
+  for (const it of items) {
+    it.y += it.vy;
+    const caught =
+      it.y + it.r > player.y && it.y - it.r < player.y + player.h &&
+      it.x > player.x && it.x < player.x + player.w;
+    if (caught) {
+      it.dead = true;
+      if (it.type === "apple") score++;
+      else if (--lives <= 0) state = "over";
+    } else if (it.y > H + 20) {
+      it.dead = true;
+    }
+  }
+  items = items.filter(it => !it.dead);
+}
+
+function drawPlayer() {
+  ctx.fillStyle = "#a9703a";
+  ctx.beginPath();
+  ctx.moveTo(player.x, player.y);
+  ctx.lineTo(player.x + player.w, player.y);
+  ctx.lineTo(player.x + player.w - 10, player.y + player.h);
+  ctx.lineTo(player.x + 10, player.y + player.h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#7a4e22"; ctx.lineWidth = 3;
+  ctx.stroke();
+}
+
+function drawItem(it) {
+  if (it.type === "apple") {
+    ctx.fillStyle = "#d92f2f";
+    ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#3b7d2a";
+    ctx.fillRect(it.x - 1, it.y - it.r - 6, 3, 8);
+  } else {
+    ctx.fillStyle = "#6b6f75";
+    ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#8d9299";
+    ctx.beginPath(); ctx.arc(it.x - 5, it.y - 5, it.r / 3, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function centerText(text, y, size, color = "#23313b") {
+  ctx.fillStyle = color;
+  ctx.font = `bold ${size}px "Trebuchet MS", Verdana, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.fillText(text, W / 2, y);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#5a8f3c";
+  ctx.fillRect(0, H - 30, W, 30);
+
+  if (state === "start") {
+    centerText("Apple Catcher", 240, 44);
+    centerText("Catch the apples. Dodge the rocks.", 290, 20);
+    centerText("Move: arrow keys or drag", 340, 18);
+    centerText("Press Enter or tap to start", 400, 22, "#b3261e");
+    return;
+  }
+
+  drawPlayer();
+  items.forEach(drawItem);
+
+  ctx.fillStyle = "#23313b";
+  ctx.font = "bold 22px 'Trebuchet MS', Verdana, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Score: " + score, 16, 34);
+  ctx.textAlign = "right";
+  ctx.fillText("Lives: " + lives, W - 16, 34);
+
+  if (state === "over") {
+    ctx.fillStyle = "rgba(35, 49, 59, 0.75)";
+    ctx.fillRect(0, 0, W, H);
+    centerText("Game Over", 270, 46, "#ffffff");
+    centerText("Final score: " + score, 320, 26, "#ffffff");
+    centerText("Press Enter or tap to play again", 380, 20, "#ffd37a");
+  }
+}
+
+function loop() {
+  if (state === "playing") update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
